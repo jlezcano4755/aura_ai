@@ -82,4 +82,3 @@ def handle_message(chat_id: int, text: str) -> str:
                 return "Thank you! We'll reach out soon."
 
     return message.content or ""
-

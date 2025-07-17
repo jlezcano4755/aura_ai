@@ -2,6 +2,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+
 DB_PATH = Path("crm.db")
 
 
@@ -35,7 +36,7 @@ def save_lead(
         )
         conn.commit()
 
-
+        
 def get_lead_by_telegram_id(telegram_id: int):
     """Return a lead row if it exists for a Telegram ID."""
     with closing(sqlite3.connect(DB_PATH)) as conn:
@@ -45,6 +46,6 @@ def get_lead_by_telegram_id(telegram_id: int):
         )
         return cur.fetchone()
 
-
+      
 # Ensure the database exists when this module is imported
 init_db()

@@ -7,6 +7,7 @@ from typing import Any, Dict
 from flask import Flask, request, abort
 import requests
 
+
 from ai import handle_message
 from db import init_db
 

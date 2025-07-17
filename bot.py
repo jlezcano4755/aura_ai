@@ -7,7 +7,8 @@ from typing import Any, Dict
 from flask import Flask, request, abort
 import requests
 
-from ai import handle_message, start_session
+
+from ai import handle_message
 from db import init_db
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -32,9 +33,6 @@ def telegram_webhook() -> Dict[str, Any]:
 
     if chat_id is None:
         return {}
-
-    if chat_id not in start_session.__globals__["active_sessions"]:
-        start_session(chat_id)
 
     reply = handle_message(chat_id, text)
 

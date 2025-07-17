@@ -1,85 +1,84 @@
 """GPT-based conversation logic for the AURA assistant."""
 from __future__ import annotations
 
+import json
 import os
-from typing import Dict
+from typing import Dict, List
 
-import openai
+from openai import OpenAI
 
-from db import save_lead
+from db import get_lead_by_telegram_id, save_lead
 
-# System prompt guiding the assistant's tone and purpose
+
 SYSTEM_PROMPT = (
-    "You are AURA, a polite human-like assistant helping new clients "
-    "schedule an appointment with a psychologist. "
-    "Collect the client's name, the service type they need, and their "
-    "preferred time. Once you have all of the information, politely "
-    "confirm and let them know someone will reach out at +50766554337."
+    "You are AURA, a polite assistant helping new psychology clients schedule an appointment. "
+    "Gather the client's full name, requested service type, preferred time, and phone number. "
+    "Once all details are collected, confirm and end the conversation."
 )
 
-openai.api_key = os.environ.get("OPENAI_API_KEY", "")
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
 
 # In-memory session store
-active_sessions: Dict[int, Dict] = {}
-
-PROMPTS = {
-    0: "Ask the user for their name.",
-    1: "Thank them and ask what service they are interested in.",
-    2: "Thank them and ask for their preferred schedule.",
-    3: "Confirm the provided name, service, and preferred schedule. "
-       "Tell them someone will contact them at +50766554337 and end the conversation politely."
-}
+active_sessions: Dict[int, List[Dict[str, str]]] = {}
 
 
 def start_session(chat_id: int) -> None:
-    """Create a new session for a Telegram chat."""
+    """Initialize conversation history for a Telegram chat."""
     if chat_id not in active_sessions:
-        active_sessions[chat_id] = {
-            "step": 0,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-            ],
-            "data": {
-                "name": None,
-                "service": None,
-                "preferred_time": None,
-            },
-        }
+        active_sessions[chat_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
 
 def handle_message(chat_id: int, text: str) -> str:
     """Process an incoming message and return the assistant's reply."""
-    session = active_sessions.setdefault(chat_id, None)
-    if session is None:
-        start_session(chat_id)
-        session = active_sessions[chat_id]
+    if get_lead_by_telegram_id(chat_id):
+        return "Thank you, we already have your information. We'll be in touch soon."
 
-    step = session["step"]
+    start_session(chat_id)
+    msgs = active_sessions[chat_id]
+    msgs.append({"role": "user", "content": text})
 
-    if step == 0:
-        session["data"]["name"] = text.strip()
-        session["step"] = 1
-    elif step == 1:
-        session["data"]["service"] = text.strip()
-        session["step"] = 2
-    elif step == 2:
-        session["data"]["preferred_time"] = text.strip()
-        save_lead(
-            telegram_id=chat_id,
-            name=session["data"]["name"],
-            service=session["data"]["service"],
-            preferred_time=session["data"]["preferred_time"],
-        )
-        session["step"] = 3
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "save_lead",
+                "description": "Store prospect data once all fields are collected",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "service": {"type": "string"},
+                        "preferred_time": {"type": "string"},
+                        "phone": {"type": "string"},
+                    },
+                    "required": ["name", "service", "preferred_time", "phone"],
+                },
+            },
+        }
+    ]
 
-    instruction = PROMPTS.get(session["step"], "")
-    session["messages"].append({"role": "system", "content": instruction})
-
-    response = openai.ChatCompletion.create(
-        model="gpt-4.1",
-        messages=session["messages"],
+    response = client.chat.completions.create(
+        model="gpt-4-turbo",
+        messages=msgs,
+        tools=tools,
+        tool_choice="auto",
     )
 
-    reply = response.choices[0].message.content.strip()
-    session["messages"].append({"role": "assistant", "content": reply})
-    return reply
+    message = response.choices[0].message
+    msgs.append(message.model_dump(exclude_none=True))
+
+    if message.tool_calls:
+        for call in message.tool_calls:
+            if call.function.name == "save_lead":
+                args = json.loads(call.function.arguments)
+                save_lead(
+                    telegram_id=chat_id,
+                    name=args["name"],
+                    service=args["service"],
+                    preferred_time=args["preferred_time"],
+                    phone=args["phone"],
+                )
+                msgs.append({"role": "assistant", "content": "Thank you! We'll reach out soon."})
+                return "Thank you! We'll reach out soon."
+
+    return message.content or ""

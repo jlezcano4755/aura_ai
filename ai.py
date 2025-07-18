@@ -18,18 +18,20 @@ from db import (
     schedule_appointment,
     update_sale_temperature,
     get_lead_id,
+    check_availability,
+    suggest_alternative_slots,
+    add_intake_note,
+    escalate_case,
 )
 
 
 SYSTEM_PROMPT = (
-
-    "Eres AURA, la asistente virtual de la psicóloga Clara, especializada en neurociencia conductual y desarrollo infantil. "
-    "Clara ofrece varios paquetes de terapia y servicios relacionados y trabaja de lunes a sábado de 2:00 PM a 10:00 PM. "
-    "Habla siempre en español a menos que detectes que el usuario escribe claramente en otro idioma. "
-    "Conversar brevemente para comprender las necesidades antes de ofrecer precios detallados. "
-    "Ayuda a agendar sesiones, responde preguntas sobre la práctica de Clara y mantén las respuestas cortas y amables. "
-    "Reúne el nombre del cliente, servicio de interés, horario preferido y número de teléfono, actualizando la base de datos a medida que aprendas nuevos datos."
-
+    "Eres AURA, asistente virtual de la Lic. Clara Ordoñez, psicóloga especializada en neurociencia conductual y desarrollo infantil. "
+    "Hablas en español salvo que el usuario solicite otro idioma y mantienes un tono cálido, empático, conciso y profesional. "
+    "Evalúa de forma rápida la situación emocional, brinda contención sin diagnosticar, y reúne nombre, servicio de interés, horario preferido y teléfono. "
+    "Antes de ofrecer un horario verifica disponibilidad y, de ser necesario, sugiere alternativas; después agenda sin solapamientos. "
+    "Escala urgencias o peticiones de hablar con Clara y registra la temperatura de venta según el interés mostrado. "
+    "Clara atiende de lunes a sábado entre las 14:00 y las 22:00."
 )
 
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
@@ -120,6 +122,66 @@ def handle_message(telegram_id: int, text: str) -> str:
                 },
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "check_availability",
+                "description": "Check if a time slot is free for a service",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "service_id": {"type": "integer"},
+                        "proposed_time": {"type": "string"},
+                    },
+                    "required": ["service_id", "proposed_time"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "suggest_alternative_slots",
+                "description": "Suggest up to 3 alternative slots",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "service_id": {"type": "integer"},
+                        "date_range": {"type": "string"},
+                    },
+                    "required": ["service_id", "date_range"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "add_intake_note",
+                "description": "Store an intake note for the lead",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "note_type": {"type": "string"},
+                        "note_text": {"type": "string"},
+                    },
+                    "required": ["note_type", "note_text"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "escalate_case",
+                "description": "Escalate the conversation to Clara",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reason": {"type": "string"},
+                        "details": {"type": "string"},
+                    },
+                    "required": ["reason"],
+                },
+            },
+        },
     ]
 
     loop_count = 0
@@ -158,6 +220,38 @@ def handle_message(telegram_id: int, text: str) -> str:
             elif call.function.name == "update_sale_temperature":
                 args = json.loads(call.function.arguments)
                 update_sale_temperature(telegram_id, int(args["temperature"]))
+                result = "ok"
+            elif call.function.name == "check_availability":
+                args = json.loads(call.function.arguments)
+                available = check_availability(
+                    args["service_id"], args["proposed_time"]
+                )
+                result = {"available": available}
+            elif call.function.name == "suggest_alternative_slots":
+                args = json.loads(call.function.arguments)
+                slots = suggest_alternative_slots(
+                    args["service_id"], args["date_range"]
+                )
+                result = {"slots": slots}
+            elif call.function.name == "add_intake_note":
+                args = json.loads(call.function.arguments)
+                lead_id = get_lead_id(telegram_id)
+                if lead_id:
+                    add_intake_note(
+                        lead_id=lead_id,
+                        note_type=args["note_type"],
+                        note_text=args["note_text"],
+                    )
+                result = "ok"
+            elif call.function.name == "escalate_case":
+                args = json.loads(call.function.arguments)
+                lead_id = get_lead_id(telegram_id)
+                if lead_id:
+                    escalate_case(
+                        lead_id=lead_id,
+                        reason=args["reason"],
+                        details=args.get("details"),
+                    )
                 result = "ok"
 
             tool_messages.append(

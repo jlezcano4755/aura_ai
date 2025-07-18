@@ -25,6 +25,7 @@ logging.basicConfig(
     filename="server.log",
     filemode="a",
 )
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 init_db()
@@ -56,7 +57,6 @@ def telegram_webhook() -> Dict[str, Any]:
         update_lead(
             telegram_id,
             phone=contact.get("phone_number"),
-            name=contact.get("first_name"),
         )
 
     lead = get_lead_by_telegram_id(telegram_id)

@@ -150,6 +150,17 @@ def list_services():
         return cur.fetchall()
 
 
+def get_service_name(service_id: int) -> str | None:
+    """Return the service name for a given id."""
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        cur = conn.execute(
+            "SELECT name FROM services WHERE id=?",
+            (service_id,),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+
+
 def list_open_times():
     """Return weekly open times."""
     with closing(sqlite3.connect(DB_PATH)) as conn:

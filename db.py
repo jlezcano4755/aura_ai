@@ -1,7 +1,7 @@
 import sqlite3
 from contextlib import closing
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 DB_PATH = Path("crm.db")
@@ -50,6 +50,28 @@ def init_db() -> None:
                 lead_id INTEGER,
                 service_id INTEGER,
                 scheduled_time TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS intake_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lead_id INTEGER,
+                note_type TEXT,
+                note_text TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS escalated_cases (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lead_id INTEGER,
+                reason TEXT,
+                details TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
@@ -172,6 +194,59 @@ def schedule_appointment(lead_id: int, service_id: int, scheduled_time: str) -> 
 def update_sale_temperature(telegram_id: int, temperature: int) -> None:
     """Update a lead's sale temperature."""
     update_lead(telegram_id, sale_temperature=temperature)
+
+
+def check_availability(service_id: int, proposed_time: str) -> bool:
+    """Return True if the slot is free and within opening hours."""
+    when = datetime.fromisoformat(proposed_time)
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        if not _is_within_open_times(conn, when):
+            return False
+        cur = conn.execute(
+            "SELECT COUNT(*) FROM appointments WHERE scheduled_time=?",
+            (proposed_time,),
+        )
+        return cur.fetchone()[0] == 0
+
+
+def suggest_alternative_slots(service_id: int, date_range: str) -> list[str]:
+    """Return up to 3 free slots within the given date range."""
+    start_str, end_str = date_range.split("/")
+    start = datetime.fromisoformat(start_str)
+    end = datetime.fromisoformat(end_str)
+    slots: list[str] = []
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        current = start
+        while current <= end and len(slots) < 3:
+            if _is_within_open_times(conn, current):
+                cur = conn.execute(
+                    "SELECT COUNT(*) FROM appointments WHERE scheduled_time=?",
+                    (current.isoformat(timespec='minutes'),),
+                )
+                if cur.fetchone()[0] == 0:
+                    slots.append(current.isoformat(timespec='minutes'))
+            current += timedelta(hours=1)
+    return slots
+
+
+def add_intake_note(lead_id: int, note_type: str, note_text: str) -> None:
+    """Store an intake note for a lead."""
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.execute(
+            "INSERT INTO intake_notes(lead_id, note_type, note_text) VALUES (?,?,?)",
+            (lead_id, note_type, note_text),
+        )
+        conn.commit()
+
+
+def escalate_case(lead_id: int, reason: str, details: str | None = None) -> None:
+    """Record an escalated case for manual follow-up."""
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.execute(
+            "INSERT INTO escalated_cases(lead_id, reason, details) VALUES (?,?,?)",
+            (lead_id, reason, details or ""),
+        )
+        conn.commit()
 
       
 # Ensure the database exists when this module is imported

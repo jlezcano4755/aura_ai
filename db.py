@@ -1,6 +1,7 @@
 import sqlite3
 from contextlib import closing
 from pathlib import Path
+from datetime import datetime
 
 
 DB_PATH = Path("crm.db")
@@ -52,6 +53,30 @@ def init_db() -> None:
             )
             """
         )
+        conn.commit()
+
+        # Seed default data if tables are empty
+        cur = conn.execute("SELECT COUNT(*) FROM services")
+        if cur.fetchone()[0] == 0:
+            services = [
+                ("Initial consultation", 50.0),
+                ("Behavioral therapy package", 300.0),
+                ("Parent guidance session", 80.0),
+            ]
+            conn.executemany(
+                "INSERT INTO services(name, price) VALUES (?, ?)", services
+            )
+
+        cur = conn.execute("SELECT COUNT(*) FROM open_times")
+        if cur.fetchone()[0] == 0:
+            times = [
+                (d, "14:00", "22:00") for d in range(1, 7)
+            ]  # Monday(1) to Saturday(6)
+            conn.executemany(
+                "INSERT INTO open_times(day_of_week, open_time, close_time) VALUES (?,?,?)",
+                times,
+            )
+
         conn.commit()
 
 
@@ -110,9 +135,26 @@ def list_open_times():
         return cur.fetchall()
 
 
-def schedule_appointment(lead_id: int, service_id: int, scheduled_time: str) -> None:
-    """Store a new appointment if the slot is free."""
+def _is_within_open_times(conn: sqlite3.Connection, when: datetime) -> bool:
+    day = when.isoweekday()
+    cur = conn.execute(
+        "SELECT open_time, close_time FROM open_times WHERE day_of_week=?",
+        (day,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return False
+    open_t = datetime.strptime(row[0], "%H:%M").time()
+    close_t = datetime.strptime(row[1], "%H:%M").time()
+    return open_t <= when.time() <= close_t
+
+
+def schedule_appointment(lead_id: int, service_id: int, scheduled_time: str) -> bool:
+    """Store a new appointment if the slot is free and within open hours."""
+    when = datetime.fromisoformat(scheduled_time)
     with closing(sqlite3.connect(DB_PATH)) as conn:
+        if not _is_within_open_times(conn, when):
+            return False
         cur = conn.execute(
             "SELECT COUNT(*) FROM appointments WHERE scheduled_time=?",
             (scheduled_time,),
@@ -123,6 +165,8 @@ def schedule_appointment(lead_id: int, service_id: int, scheduled_time: str) -> 
                 (lead_id, service_id, scheduled_time),
             )
             conn.commit()
+            return True
+    return False
 
 
 def update_sale_temperature(telegram_id: int, temperature: int) -> None:

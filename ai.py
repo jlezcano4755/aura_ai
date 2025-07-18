@@ -22,10 +22,12 @@ from db import (
 
 
 SYSTEM_PROMPT = (
-    "You are AURA, a polite assistant helping new psychology clients schedule an appointment. "
-    "You know the current date and time and can check prices and availability using the provided tools. "
-    "Gather the client's name, service of interest, preferred time and phone number, updating the database as you learn new facts. "
-    "Always keep the conversation short and helpful."
+    "Eres AURA, la asistente virtual de la psicóloga Clara, especializada en neurociencia conductual y desarrollo infantil. "
+    "Clara ofrece varios paquetes de terapia y servicios relacionados y trabaja de lunes a sábado de 2:00 PM a 10:00 PM. "
+    "Habla siempre en español a menos que detectes que el usuario escribe claramente en otro idioma. "
+    "Conversar brevemente para comprender las necesidades antes de ofrecer precios detallados. "
+    "Ayuda a agendar sesiones, responde preguntas sobre la práctica de Clara y mantén las respuestas cortas y amables. "
+    "Reúne el nombre del cliente, servicio de interés, horario preferido y número de teléfono, actualizando la base de datos a medida que aprendas nuevos datos."
 )
 
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
@@ -34,27 +36,41 @@ client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
 active_sessions: Dict[int, List[Dict[str, str]]] = {}
 
 
-def start_session(chat_id: int) -> None:
-    """Initialize conversation history for a Telegram chat."""
-    if chat_id not in active_sessions:
-        now = datetime.utcnow().isoformat(sep=" ", timespec="minutes")
-        services = ", ".join([f"{s[1]} (${s[2]})" for s in list_services()])
-        open_times = ", ".join([
-            f"{ot[0]}:{ot[1]}-{ot[2]}" for ot in list_open_times()
-        ])
-        system_msg = (
-            f"{SYSTEM_PROMPT} Current datetime: {now}. Available services: {services}. "
-            f"Opening hours (day:open-close): {open_times}."
-        )
-        active_sessions[chat_id] = [{"role": "system", "content": system_msg}]
+def start_session(telegram_id: int) -> None:
+    """Initialize conversation history for a Telegram user."""
+    now = datetime.utcnow().isoformat(sep=" ", timespec="minutes")
+    services = ", ".join([f"{s[1]} (${s[2]})" for s in list_services()])
+    open_times = ", ".join([
+        f"{ot[0]}:{ot[1]}-{ot[2]}" for ot in list_open_times()
+    ])
+    lead = get_lead_by_telegram_id(telegram_id)
+    lead_info_parts = []
+    if lead:
+        if lead[2]:
+            lead_info_parts.append(f"name: {lead[2]}")
+        if lead[3]:
+            lead_info_parts.append(f"service: {lead[3]}")
+        if lead[4]:
+            lead_info_parts.append(f"preferred time: {lead[4]}")
+        if lead[5]:
+            lead_info_parts.append(f"phone: {lead[5]}")
+    lead_info = " Known lead data: " + ", ".join(lead_info_parts) + "." if lead_info_parts else ""
+    system_msg = (
+        f"{SYSTEM_PROMPT} Current datetime: {now}. Available services: {services}. "
+        f"Opening hours (day:open-close): {open_times}.{lead_info}"
+    )
+    if telegram_id in active_sessions:
+        active_sessions[telegram_id][0] = {"role": "system", "content": system_msg}
+    else:
+        active_sessions[telegram_id] = [{"role": "system", "content": system_msg}]
 
 
-def handle_message(chat_id: int, text: str) -> str:
+def handle_message(telegram_id: int, text: str) -> str:
     """Process an incoming message and return the assistant's reply."""
-    create_lead(chat_id)
+    create_lead(telegram_id)
 
-    start_session(chat_id)
-    msgs = active_sessions[chat_id]
+    start_session(telegram_id)
+    msgs = active_sessions[telegram_id]
     msgs.append({"role": "user", "content": text})
 
     tools = [
@@ -117,10 +133,10 @@ def handle_message(chat_id: int, text: str) -> str:
         for call in message.tool_calls:
             if call.function.name == "update_lead":
                 args = json.loads(call.function.arguments)
-                update_lead(chat_id, **args)
+                update_lead(telegram_id, **args)
             elif call.function.name == "schedule_appointment":
                 args = json.loads(call.function.arguments)
-                lead_id = get_lead_id(chat_id)
+                lead_id = get_lead_id(telegram_id)
                 if lead_id:
                     schedule_appointment(
                         lead_id=lead_id,
@@ -129,6 +145,6 @@ def handle_message(chat_id: int, text: str) -> str:
                     )
             elif call.function.name == "update_sale_temperature":
                 args = json.loads(call.function.arguments)
-                update_sale_temperature(chat_id, int(args["temperature"]))
+                update_sale_temperature(telegram_id, int(args["temperature"]))
 
     return message.content or ""

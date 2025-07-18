@@ -21,10 +21,11 @@ AURA (Automated Unified Response Agent) is an AI-powered Telegram assistant for 
    # edit .env.local with OPENAI_API_KEY, TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET
    ```
 3. Run the server:
-   ```bash
-   python bot.py
-   ```
+    ```bash
+    python bot.py
+    ```
 4. Configure your Telegram bot webhook to point to `https://<your-domain>/telegram` using the secret token from `TELEGRAM_WEBHOOK_SECRET`.
 
-
 The bot converses with prospects, collects their name, service type, preferred schedule and phone number, then stores the information in `crm.db`.
+
+`db.py` seeds a few sample services and opening hours for Clara's practice on the first run. Leads are stored using the user's Telegram ID (not the chat ID) so conversation history and appointments are tied to each person.

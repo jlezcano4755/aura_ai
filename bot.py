@@ -38,23 +38,25 @@ def telegram_webhook() -> Dict[str, Any]:
     logger.debug(f"update received: {data}")
     message = data.get("message", {})
     chat = message.get("chat", {})
-    chat_id = chat.get("id")
+    chat_id = chat.get("id")  # where replies are sent
+    user = message.get("from", {})
+    telegram_id = user.get("id")
     text = message.get("text", "")
     contact = message.get("contact")
 
-    if chat_id is None:
+    if chat_id is None or telegram_id is None:
         return {}
 
-    create_lead(chat_id)
+    create_lead(telegram_id)
 
     if contact:
         update_lead(
-            chat_id,
+            telegram_id,
             phone=contact.get("phone_number"),
             name=contact.get("first_name"),
         )
 
-    lead = get_lead_by_telegram_id(chat_id)
+    lead = get_lead_by_telegram_id(telegram_id)
 
     if (lead is None or lead[5] is None) and not contact:
         keyboard = {
@@ -70,7 +72,7 @@ def telegram_webhook() -> Dict[str, Any]:
         logger.debug(f"requested contact from {chat_id}")
         return {"ok": True}
 
-    reply = handle_message(chat_id, text)
+    reply = handle_message(telegram_id, text)
 
     payload = {"chat_id": chat_id, "text": reply}
     requests.post(TELEGRAM_API_URL, json=payload)

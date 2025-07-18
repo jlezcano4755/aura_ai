@@ -121,32 +121,54 @@ def handle_message(telegram_id: int, text: str) -> str:
         },
     ]
 
-    response = client.chat.completions.create(
-        model="gpt-4-turbo",
-        messages=msgs,
-        tools=tools,
-        tool_choice="auto",
-    )
+    loop_count = 0
+    while True:
+        response = client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=msgs,
+            tools=tools,
+            tool_choice="auto",
+        )
 
-    message = response.choices[0].message
-    msgs.append(message.model_dump(exclude_none=True))
+        message = response.choices[0].message
+        msgs.append(message.model_dump(exclude_none=True))
 
-    if message.tool_calls:
+        if not message.tool_calls:
+            return message.content or ""
+
+        tool_messages = []
         for call in message.tool_calls:
+            result = None
             if call.function.name == "update_lead":
                 args = json.loads(call.function.arguments)
                 update_lead(telegram_id, **args)
+                result = "ok"
             elif call.function.name == "schedule_appointment":
                 args = json.loads(call.function.arguments)
                 lead_id = get_lead_id(telegram_id)
+                success = False
                 if lead_id:
-                    schedule_appointment(
+                    success = schedule_appointment(
                         lead_id=lead_id,
                         service_id=args["service_id"],
                         scheduled_time=args["scheduled_time"],
                     )
+                result = str(success).lower()
             elif call.function.name == "update_sale_temperature":
                 args = json.loads(call.function.arguments)
                 update_sale_temperature(telegram_id, int(args["temperature"]))
+                result = "ok"
 
-    return message.content or ""
+            tool_messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "name": call.function.name,
+                    "content": json.dumps({"result": result}),
+                }
+            )
+
+        msgs.extend(tool_messages)
+        loop_count += 1
+        if loop_count > 3:
+            return ""

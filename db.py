@@ -54,6 +54,30 @@ def init_db() -> None:
         )
         conn.commit()
 
+        # Seed default data if tables are empty
+        cur = conn.execute("SELECT COUNT(*) FROM services")
+        if cur.fetchone()[0] == 0:
+            services = [
+                ("Initial consultation", 50.0),
+                ("Behavioral therapy package", 300.0),
+                ("Parent guidance session", 80.0),
+            ]
+            conn.executemany(
+                "INSERT INTO services(name, price) VALUES (?, ?)", services
+            )
+
+        cur = conn.execute("SELECT COUNT(*) FROM open_times")
+        if cur.fetchone()[0] == 0:
+            times = [
+                (d, "14:00", "22:00") for d in range(1, 7)
+            ]  # Monday(1) to Saturday(6)
+            conn.executemany(
+                "INSERT INTO open_times(day_of_week, open_time, close_time) VALUES (?,?,?)",
+                times,
+            )
+
+        conn.commit()
+
 
 def create_lead(telegram_id: int) -> None:
     """Ensure a lead entry exists."""

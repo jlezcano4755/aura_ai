@@ -1,6 +1,7 @@
 import sqlite3
 from contextlib import closing
 from pathlib import Path
+from datetime import datetime
 
 
 DB_PATH = Path("crm.db")
@@ -134,9 +135,26 @@ def list_open_times():
         return cur.fetchall()
 
 
-def schedule_appointment(lead_id: int, service_id: int, scheduled_time: str) -> None:
-    """Store a new appointment if the slot is free."""
+def _is_within_open_times(conn: sqlite3.Connection, when: datetime) -> bool:
+    day = when.isoweekday()
+    cur = conn.execute(
+        "SELECT open_time, close_time FROM open_times WHERE day_of_week=?",
+        (day,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return False
+    open_t = datetime.strptime(row[0], "%H:%M").time()
+    close_t = datetime.strptime(row[1], "%H:%M").time()
+    return open_t <= when.time() <= close_t
+
+
+def schedule_appointment(lead_id: int, service_id: int, scheduled_time: str) -> bool:
+    """Store a new appointment if the slot is free and within open hours."""
+    when = datetime.fromisoformat(scheduled_time)
     with closing(sqlite3.connect(DB_PATH)) as conn:
+        if not _is_within_open_times(conn, when):
+            return False
         cur = conn.execute(
             "SELECT COUNT(*) FROM appointments WHERE scheduled_time=?",
             (scheduled_time,),
@@ -147,6 +165,8 @@ def schedule_appointment(lead_id: int, service_id: int, scheduled_time: str) -> 
                 (lead_id, service_id, scheduled_time),
             )
             conn.commit()
+            return True
+    return False
 
 
 def update_sale_temperature(telegram_id: int, temperature: int) -> None:

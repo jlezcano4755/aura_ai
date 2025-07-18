@@ -8,6 +8,9 @@ from typing import Any, Dict
 from flask import Flask, request, abort
 import requests
 
+from dotenv import load_dotenv
+load_dotenv()
+
 
 from ai import handle_message
 from db import init_db, get_lead_by_telegram_id, create_lead, update_lead

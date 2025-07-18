@@ -33,6 +33,7 @@ SYSTEM_PROMPT = (
 )
 
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+model = os.environ.get("OPENAI_CHAT_MODEL", "gpt-4.1")
 
 # In-memory session store
 active_sessions: Dict[int, List[Dict[str, str]]] = {}
@@ -124,7 +125,7 @@ def handle_message(telegram_id: int, text: str) -> str:
     loop_count = 0
     while True:
         response = client.chat.completions.create(
-            model="gpt-4-turbo",
+            model=model,
             messages=msgs,
             tools=tools,
             tool_choice="auto",

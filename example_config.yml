@@ -1,0 +1,35 @@
+openai_api_key: YOUR_OPENAI_KEY
+openai_chat_model: gpt-4.1
+telegram_api_id: 123456
+telegram_api_hash: your_api_hash
+telegram_phone: '+1234567890'
+bot_name: 'Clara Therapy Bot'
+bot_username: 'clara_therapy_bot'
+telegram_webhook_url: 'https://your-domain.com/telegram'
+telegram_webhook_secret: your_webhook_secret
+bot_description: 'Automated intake assistant for Clara.'
+bot_about: 'Handles appointment scheduling and queries.'
+services:
+  - name: 'Initial consultation'
+    price: 60.0
+  - name: 'Therapy session'
+    price: 80.0
+open_times:
+  - day: 1
+    open: '14:00'
+    close: '22:00'
+  - day: 2
+    open: '14:00'
+    close: '22:00'
+  - day: 3
+    open: '14:00'
+    close: '22:00'
+  - day: 4
+    open: '14:00'
+    close: '22:00'
+  - day: 5
+    open: '14:00'
+    close: '22:00'
+  - day: 6
+    open: '14:00'
+    close: '22:00'

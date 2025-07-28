@@ -1,13 +1,20 @@
-"""Bootstrap deployment from a YAML configuration."""
+"""Bootstrap deployment from a YAML configuration.
+
+The script now builds and pushes the Docker image if necessary, starts an
+ngrok tunnel for the webhook, registers the bot with Telegram and finally
+launches the bot container.
+"""
 
 import re
 import sys
+import subprocess
 from pathlib import Path
 from typing import Any, Dict
 
 import requests
 import yaml
 from telethon import TelegramClient
+from pyngrok import ngrok
 import asyncio
 
 from db import init_db, seed_services, seed_open_times
@@ -79,6 +86,50 @@ def register_webhook(bot_token: str, url: str, secret: str) -> None:
     resp.raise_for_status()
 
 
+def ensure_docker_image(config: Dict[str, Any]) -> None:
+    """Build/push the Docker image if not present and pull the latest version."""
+    repo = config["dockerhub_repo"]
+    user = config.get("dockerhub_username")
+    pwd = config.get("dockerhub_password")
+
+    try:
+        subprocess.run(["docker", "image", "inspect", repo], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        subprocess.run(["docker", "build", "-t", repo, "."], check=True)
+        if user and pwd:
+            subprocess.run(["docker", "login", "-u", user, "-p", pwd], check=True)
+        subprocess.run(["docker", "push", repo], check=True)
+
+    subprocess.run(["docker", "pull", repo], check=True)
+
+
+def start_ngrok_tunnel(token: str) -> str:
+    """Start ngrok tunnel for port 8000 and return the public URL."""
+    if token:
+        ngrok.set_auth_token(token)
+    tunnel = ngrok.connect(8000, bind_tls=True)
+    return tunnel.public_url
+
+
+def run_bot_container(config: Dict[str, Any]) -> None:
+    """Launch the bot Docker container using the generated env file."""
+    repo = config["dockerhub_repo"]
+    name = config["bot_username"]
+    subprocess.run(["docker", "rm", "-f", name], check=False)
+    subprocess.run([
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        name,
+        "--env-file",
+        ".env.local",
+        "-p",
+        "8000:8000",
+        repo,
+    ], check=True)
+
+
 REQUIRED_KEYS = [
     "openai_api_key",
     "telegram_api_id",
@@ -86,8 +137,11 @@ REQUIRED_KEYS = [
     "telegram_phone",
     "bot_name",
     "bot_username",
-    "telegram_webhook_url",
     "telegram_webhook_secret",
+    "ngrok_authtoken",
+    "dockerhub_repo",
+    "dockerhub_username",
+    "dockerhub_password",
 ]
 
 
@@ -131,12 +185,17 @@ def main(path: str) -> None:
     if missing:
         raise SystemExit(f"Missing required keys: {', '.join(missing)}")
 
+    ensure_docker_image(config)
+    public_url = start_ngrok_tunnel(config["ngrok_authtoken"])
+    webhook_url = f"{public_url}/telegram"
+
     bot_token = asyncio.run(create_telegram_bot(config))
     asyncio.run(customise_bot(config, bot_token))
-    register_webhook(bot_token, config["telegram_webhook_url"], config["telegram_webhook_secret"])
+    register_webhook(bot_token, webhook_url, config["telegram_webhook_secret"])
     write_env(config, bot_token)
     seed_db(config)
-    print("Bot created and deployment files generated: .env.local and crm.db")
+    run_bot_container(config)
+    print(f"Bot deployed and webhook set to {webhook_url}")
 
 
 if __name__ == "__main__":

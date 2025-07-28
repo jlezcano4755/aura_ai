@@ -19,7 +19,7 @@ AURA (Automated Unified Response Agent) is an AI-powered Telegram assistant for 
 2. *(For automated setup)* Create Telegram API credentials by logging in to [my.telegram.org](https://my.telegram.org) and generating an **API ID** and **API hash**.
 3. Install dependencies (requires `openai` version 1.97.0):
    ```bash
-   pip install flask requests openai==1.97.0
+   pip install -r requirements.txt
    ```
 4. Copy `.env` and fill in your keys:
    ```bash
@@ -48,4 +48,9 @@ pip install pyyaml python-dotenv telethon requests
 python setup_bot.py example_config.yml
 ```
 
-The YAML must contain your Telegram API credentials (`telegram_api_id`, `telegram_api_hash` and `telegram_phone`) and bot details (`bot_name`, `bot_username`, `telegram_webhook_url`, `telegram_webhook_secret`). OpenAI keys are also required but are not generated automatically. Optional `services` and `open_times` entries seed the database. See `example_config.yml` for the full format. When run, the script will create the bot via BotFather, register the webhook and write `.env.local` and `crm.db`.
+The YAML must contain your Telegram API credentials (`telegram_api_id`, `telegram_api_hash` and `telegram_phone`) and bot details (`bot_name`, `bot_username`, `telegram_webhook_secret`). OpenAI keys are also required but are not generated automatically. Optional `services` and `open_times` entries seed the database. See `example_config.yml` for the full format.
+
+When run, `setup_bot.py` now also builds the Docker image if needed, pushes it to Docker Hub, starts an ngrok tunnel and registers the resulting URL as the Telegram webhook. Finally the bot container is launched automatically.
+
+## Docker deployment
+The repository includes a `Dockerfile` so the bot can run anywhere with Docker installed. The image installs all requirements and launches `bot.py` on port 8000. `setup_bot.py` will push this image to Docker Hub (configured via the YAML file) if it isn't already available and then use it to run your bot container.

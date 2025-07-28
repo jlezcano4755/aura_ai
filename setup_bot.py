@@ -8,6 +8,7 @@ from typing import Any, Dict
 import requests
 import yaml
 from telethon import TelegramClient
+from pyngrok import ngrok
 import asyncio
 
 from db import init_db, seed_services, seed_open_times
@@ -79,6 +80,14 @@ def register_webhook(bot_token: str, url: str, secret: str) -> None:
     resp.raise_for_status()
 
 
+def start_ngrok(port: int, authtoken: str | None = None) -> str:
+    """Start an ngrok tunnel and return the public URL."""
+    if authtoken:
+        ngrok.set_auth_token(authtoken)
+    tunnel = ngrok.connect(port, bind_tls=True)
+    return tunnel.public_url
+
+
 REQUIRED_KEYS = [
     "openai_api_key",
     "telegram_api_id",
@@ -86,13 +95,12 @@ REQUIRED_KEYS = [
     "telegram_phone",
     "bot_name",
     "bot_username",
-    "telegram_webhook_url",
     "telegram_webhook_secret",
 ]
 
 
-def write_env(config: dict, bot_token: str) -> None:
-    """Generate .env.local with the new bot token and OpenAI settings."""
+def write_env(config: dict, bot_token: str, webhook_url: str) -> None:
+    """Generate .env.local with the bot token and webhook settings."""
     env_lines = []
     for key in [
         "openai_api_key",
@@ -105,6 +113,7 @@ def write_env(config: dict, bot_token: str) -> None:
             env_lines.append(f"{key.upper()}={value}")
     env_lines.append(f"TELEGRAM_BOT_TOKEN={bot_token}")
     env_lines.append(f"TELEGRAM_WEBHOOK_SECRET={config['telegram_webhook_secret']}")
+    env_lines.append(f"TELEGRAM_WEBHOOK_URL={webhook_url}")
     Path(".env.local").write_text("\n".join(env_lines) + "\n")
 
 
@@ -133,9 +142,18 @@ def main(path: str) -> None:
 
     bot_token = asyncio.run(create_telegram_bot(config))
     asyncio.run(customise_bot(config, bot_token))
-    register_webhook(bot_token, config["telegram_webhook_url"], config["telegram_webhook_secret"])
-    write_env(config, bot_token)
+
+    webhook_url = config.get("telegram_webhook_url")
+    if not webhook_url:
+        port = int(config.get("local_port", 8000))
+        ngrok_token = config.get("ngrok_authtoken")
+        public = start_ngrok(port, ngrok_token)
+        webhook_url = f"{public}/telegram"
+    register_webhook(bot_token, webhook_url, config["telegram_webhook_secret"])
+    write_env(config, bot_token, webhook_url)
     seed_db(config)
+    if not config.get("telegram_webhook_url"):
+        print(f"ngrok tunnel started: {webhook_url}")
     print("Bot created and deployment files generated: .env.local and crm.db")
 
 

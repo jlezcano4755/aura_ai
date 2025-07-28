@@ -5,7 +5,10 @@ telegram_api_hash: your_api_hash
 telegram_phone: '+1234567890'
 bot_name: 'Clara Therapy Bot'
 bot_username: 'clara_therapy_bot'
-telegram_webhook_url: 'https://your-domain.com/telegram'
+# If telegram_webhook_url is omitted, ngrok will be used
+local_port: 8000
+ngrok_authtoken: your_ngrok_token
+# telegram_webhook_url: 'https://your-domain.com/telegram'
 telegram_webhook_secret: your_webhook_secret
 bot_description: 'Automated intake assistant for Clara.'
 bot_about: 'Handles appointment scheduling and queries.'

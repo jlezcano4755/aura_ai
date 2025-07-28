@@ -19,7 +19,7 @@ AURA (Automated Unified Response Agent) is an AI-powered Telegram assistant for 
 2. *(For automated setup)* Create Telegram API credentials by logging in to [my.telegram.org](https://my.telegram.org) and generating an **API ID** and **API hash**.
 3. Install dependencies (requires `openai` version 1.97.0):
    ```bash
-   pip install flask requests openai==1.97.0
+   pip install flask requests openai==1.97.0 telethon pyngrok python-dotenv pyyaml
    ```
 4. Copy `.env` and fill in your keys:
    ```bash
@@ -30,7 +30,7 @@ AURA (Automated Unified Response Agent) is an AI-powered Telegram assistant for 
     ```bash
     python bot.py
     ```
-6. Expose the server publicly (e.g. via a domain or with ngrok) and configure the Telegram webhook:
+6. Expose the server publicly (e.g. via a domain or with ngrok) and configure the Telegram webhook (skip if using `setup_bot.py`):
    ```bash
    curl -X POST https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook \
         -d "url=https://<your-domain>/telegram&secret_token=$TELEGRAM_WEBHOOK_SECRET"
@@ -44,8 +44,8 @@ The bot converses with prospects, collects their name, service type, preferred s
 To bootstrap the bot configuration from a single YAML file, install the extra dependencies and run `setup_bot.py`:
 
 ```bash
-pip install pyyaml python-dotenv telethon requests
+pip install pyyaml python-dotenv telethon requests pyngrok
 python setup_bot.py example_config.yml
 ```
 
-The YAML must contain your Telegram API credentials (`telegram_api_id`, `telegram_api_hash` and `telegram_phone`) and bot details (`bot_name`, `bot_username`, `telegram_webhook_url`, `telegram_webhook_secret`). OpenAI keys are also required but are not generated automatically. Optional `services` and `open_times` entries seed the database. See `example_config.yml` for the full format. When run, the script will create the bot via BotFather, register the webhook and write `.env.local` and `crm.db`.
+The YAML must contain your Telegram API credentials (`telegram_api_id`, `telegram_api_hash` and `telegram_phone`) and bot details (`bot_name`, `bot_username`, `telegram_webhook_secret`). If `telegram_webhook_url` is omitted, the script will start an ngrok tunnel (using `local_port` and optional `ngrok_authtoken`) and register the webhook automatically. OpenAI keys are also required but are not generated automatically. Optional `services` and `open_times` entries seed the database. See `example_config.yml` for the full format. When run, the script will create the bot via BotFather, register the webhook and write `.env.local` and `crm.db`.

@@ -259,6 +259,27 @@ def escalate_case(lead_id: int, reason: str, details: str | None = None) -> None
         )
         conn.commit()
 
+
+def seed_services(services: list[tuple[str, float]]) -> None:
+    """Replace the services table with the given list."""
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.execute("DELETE FROM services")
+        conn.executemany(
+            "INSERT INTO services(name, price) VALUES (?, ?)", services
+        )
+        conn.commit()
+
+
+def seed_open_times(times: list[tuple[int, str, str]]) -> None:
+    """Replace opening hours with the given schedule."""
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        conn.execute("DELETE FROM open_times")
+        conn.executemany(
+            "INSERT INTO open_times(day_of_week, open_time, close_time) VALUES (?,?,?)",
+            times,
+        )
+        conn.commit()
+
       
 # Ensure the database exists when this module is imported
 init_db()

@@ -5,7 +5,6 @@ telegram_api_hash: your_api_hash
 telegram_phone: '+1234567890'
 bot_name: 'Clara Therapy Bot'
 bot_username: 'clara_therapy_bot'
-telegram_webhook_url: 'https://your-domain.com/telegram'
 telegram_webhook_secret: your_webhook_secret
 bot_description: 'Automated intake assistant for Clara.'
 bot_about: 'Handles appointment scheduling and queries.'
@@ -33,3 +32,7 @@ open_times:
   - day: 6
     open: '14:00'
     close: '22:00'
+ngrok_authtoken: YOUR_NGROK_TOKEN
+dockerhub_repo: yourname/aurabot
+dockerhub_username: yourname
+dockerhub_password: yourpassword
